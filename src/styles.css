@@ -247,6 +247,34 @@ button:disabled {
   border-radius: 16px;
   padding: 44px 40px;
   margin-bottom: 28px;
+  position: relative;
+  overflow: hidden;
+  min-height: 340px;
+}
+
+.hero-preview {
+  position: absolute;
+  right: 20px;
+  top: 20px;
+  bottom: 20px;
+  width: 42%;
+  border-radius: 12px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.hero-preview::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(14, 15, 19, 1) 0%, transparent 25%, transparent 100%);
+  pointer-events: none;
+}
+
+@media (max-width: 900px) {
+  .hero-preview {
+    display: none;
+  }
 }
 
 .hero .tag {

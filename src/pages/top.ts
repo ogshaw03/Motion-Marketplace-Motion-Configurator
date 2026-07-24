@@ -2,6 +2,7 @@ import { h } from '../util/dom'
 import { AppHeader } from '../components/header'
 import { MotionCard } from '../components/motion-card'
 import { href } from '../router'
+import { createPreview, type PreviewController } from '../three/preview'
 
 const ENTRIES: [string, string, string, string][] = [
   ['01', 'Explore Motions', '単品Motionから探す。Style別、Creator別に絞り込み可能。', '/motions'],
@@ -14,24 +15,41 @@ export function TopPage(): HTMLElement {
   const featuredMotions = window.DB.motions.slice(0, 8)
   const featuredSeq = window.DB.featuredSequences
 
-  return h('div', { class: 'app-main' }, [
+  const previewHost = h('div', { class: 'hero-preview' }, [])
+  let preview: PreviewController | null = null
+  queueMicrotask(() => {
+    preview = createPreview({ background: 0x14161d, showGround: true })
+    previewHost.appendChild(preview.el)
+    preview.setSequence([
+      { clip: 'run', durationSec: 0.6, loopCount: 3 },
+      { clip: 'takeoff', durationSec: 0.5, loopCount: 1 },
+      { clip: 'jump', durationSec: 0.9, loopCount: 1 },
+      { clip: 'landing', durationSec: 0.8, loopCount: 1 },
+      { clip: 'idle', durationSec: 1.0, loopCount: 2 },
+    ])
+  })
+
+  const root = h('div', { class: 'app-main' }, [
     AppHeader(),
     h('div', { class: 'page' }, [
       h('div', { class: 'hero' }, [
-        h('div', { class: 'tag' }, ['Animator-Crafted Motion × Motion Configurator']),
-        h('h1', {}, [
-          'プロのアニメーターがデザインした動きを、',
-          h('br', {}, []),
-          'Web上で組み合わせて試して買う。',
-        ]),
-        h('p', { class: 'lead' }, [
-          'Run → Designed Transition → Jump → Landing。',
-          'カーコンフィギュレーター型の3D Configuratorで、',
-          '一連のSequenceとして構築・Preview・購入できるMotion Marketplace。',
-        ]),
-        h('div', { class: 'cta-row' }, [
-          h('a', { class: 'btn primary', href: href('/configurator') }, ['Configuratorを開く']),
-          h('a', { class: 'btn ghost', href: href('/motions') }, ['Motionを探す']),
+        previewHost,
+        h('div', { style: 'position: relative; z-index: 2; max-width: 640px;' }, [
+          h('div', { class: 'tag' }, ['Animator-Crafted Motion × Motion Configurator']),
+          h('h1', {}, [
+            'プロのアニメーターがデザインした動きを、',
+            h('br', {}, []),
+            'Web上で組み合わせて試して買う。',
+          ]),
+          h('p', { class: 'lead' }, [
+            'Run → Designed Transition → Jump → Landing。',
+            'カーコンフィギュレーター型の3D Configuratorで、',
+            '一連のSequenceとして構築・Preview・購入できるMotion Marketplace。',
+          ]),
+          h('div', { class: 'cta-row' }, [
+            h('a', { class: 'btn primary', href: href('/configurator') }, ['Configuratorを開く']),
+            h('a', { class: 'btn ghost', href: href('/motions') }, ['Motionを探す']),
+          ]),
         ]),
       ]),
 
@@ -78,4 +96,7 @@ export function TopPage(): HTMLElement {
       h('div', { class: 'motions-grid' }, featuredMotions.map(MotionCard)),
     ]),
   ])
+
+  ;(root as any).__onLeave = () => preview?.dispose()
+  return root
 }

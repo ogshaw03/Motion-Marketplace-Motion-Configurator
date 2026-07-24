@@ -55,7 +55,8 @@ export async function navigate(hash: string): Promise<void> {
   }
   const el = await m.route.render(m.params)
   mountEl.appendChild(el)
-  currentOnLeave = m.route.onLeave
+  const elLeave = (el as { __onLeave?: () => void }).__onLeave
+  currentOnLeave = elLeave || m.route.onLeave
   window.scrollTo(0, 0)
   window.__APP_READY__ = true
 }
