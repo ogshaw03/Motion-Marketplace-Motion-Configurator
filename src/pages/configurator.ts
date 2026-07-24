@@ -30,7 +30,7 @@ export function ConfiguratorPage(_params: Record<string, string>): HTMLElement {
   queueMicrotask(() => {
     preview = createPreview({ clip: 'idle', loop: true })
     previewHost.appendChild(preview.el)
-    previewHost.appendChild(playAllControls(() => playAllSequence(preview!)))
+    previewHost.appendChild(makePlayControls(() => preview && playAllSequence(preview), () => preview))
     applyActiveClipToPreview()
   })
 
@@ -426,17 +426,43 @@ export function ConfiguratorPage(_params: Record<string, string>): HTMLElement {
   return container
 }
 
-function playAllControls(onPlay: () => void): HTMLElement {
+function makePlayControls(onPlayAll: () => void, getPreview: () => PreviewController | null): HTMLElement {
+  const playBtn = h('button', { class: 'btn small' }, ['⏸']) as HTMLButtonElement
+  playBtn.addEventListener('click', () => {
+    const p = getPreview()
+    if (!p) return
+    if (p.isPlaying()) {
+      p.pause()
+      playBtn.textContent = '▶'
+    } else {
+      p.play()
+      playBtn.textContent = '⏸'
+    }
+  })
+
+  const makeSpeedBtn = (label: string, s: number, active = false) => {
+    const b = h('button', { class: `btn small ${active ? 'primary' : ''}` }, [label]) as HTMLButtonElement
+    b.addEventListener('click', () => {
+      const p = getPreview()
+      if (!p) return
+      p.setSpeed(s)
+      speedGroup.querySelectorAll('button').forEach((x) => x.classList.remove('primary'))
+      b.classList.add('primary')
+    })
+    return b
+  }
+  const speedGroup = h('div', { class: 'right' }, [
+    makeSpeedBtn('0.5×', 0.5),
+    makeSpeedBtn('1×', 1.0, true),
+    makeSpeedBtn('2×', 2.0),
+  ])
+
   return h('div', { class: 'play-controls' }, [
     h('div', { class: 'left' }, [
-      h('button', { class: 'btn small primary', onclick: onPlay }, ['▶ PLAY ALL']),
-      h('button', { class: 'btn small' }, ['⏸']),
+      h('button', { class: 'btn small primary', onclick: onPlayAll }, ['▶ PLAY ALL']),
+      playBtn,
     ]),
-    h('div', { class: 'timing' }, ['SEQUENCE']),
-    h('div', { class: 'right' }, [
-      h('button', { class: 'btn small' }, ['0.5×']),
-      h('button', { class: 'btn small' }, ['1×']),
-      h('button', { class: 'btn small' }, ['2×']),
-    ]),
+    h('div', { class: 'timing' }, ['SEQUENCE PREVIEW']),
+    speedGroup,
   ])
 }

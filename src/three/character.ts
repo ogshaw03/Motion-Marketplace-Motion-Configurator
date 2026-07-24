@@ -168,9 +168,10 @@ export type ClipKey =
   | 'skidStop'
   | 'takeoff'
 
-export function poseCharacter(char: Character, clip: ClipKey, t: number): void {
+export function poseCharacter(char: Character, clip: ClipKey, phase: number): void {
   const { parts } = char
   const two = Math.PI * 2
+  const p01 = ((phase % 1) + 1) % 1
 
   const resetRot = () => {
     parts.hip.rotation.set(0, 0, 0)
@@ -189,48 +190,48 @@ export function poseCharacter(char: Character, clip: ClipKey, t: number): void {
   resetRot()
 
   if (clip === 'idle') {
-    const s = Math.sin(t * two * 0.5) * 0.02
+    const s = Math.sin(p01 * two) * 0.03
     parts.hip.position.y = 1.05 + s
-    parts.torso.rotation.z = Math.sin(t * two * 0.5) * 0.02
-    parts.head.rotation.y = Math.sin(t * two * 0.25) * 0.1
-    parts.leftArm.rotation.z = 0.08
-    parts.rightArm.rotation.z = -0.08
+    parts.torso.rotation.z = Math.sin(p01 * two) * 0.02
+    parts.head.rotation.y = Math.sin(p01 * two * 0.5) * 0.12
+    parts.leftArm.rotation.z = 0.1 + Math.sin(p01 * two) * 0.02
+    parts.rightArm.rotation.z = -0.1 - Math.sin(p01 * two) * 0.02
     return
   }
   if (clip === 'walk') {
-    const p = (t % 1) * two
+    const p = p01 * two
     const sw = Math.sin(p)
-    parts.leftLeg.rotation.x = sw * 0.5
-    parts.rightLeg.rotation.x = -sw * 0.5
-    parts.leftShin.rotation.x = Math.max(0, -sw) * 0.6
-    parts.rightShin.rotation.x = Math.max(0, sw) * 0.6
-    parts.leftArm.rotation.x = -sw * 0.5
-    parts.rightArm.rotation.x = sw * 0.5
-    parts.leftForearm.rotation.x = -Math.max(0, sw) * 0.2
-    parts.rightForearm.rotation.x = -Math.max(0, -sw) * 0.2
+    parts.leftLeg.rotation.x = sw * 0.55
+    parts.rightLeg.rotation.x = -sw * 0.55
+    parts.leftShin.rotation.x = Math.max(0, -sw) * 0.7
+    parts.rightShin.rotation.x = Math.max(0, sw) * 0.7
+    parts.leftArm.rotation.x = -sw * 0.55
+    parts.rightArm.rotation.x = sw * 0.55
+    parts.leftForearm.rotation.x = -Math.max(0, sw) * 0.3
+    parts.rightForearm.rotation.x = -Math.max(0, -sw) * 0.3
     parts.hip.position.y = 1.05 + Math.abs(Math.sin(p * 2)) * 0.04
     parts.torso.rotation.y = sw * 0.1
     return
   }
   if (clip === 'run') {
-    const p = (t % 1) * two * 1.6
+    const p = p01 * two
     const sw = Math.sin(p)
-    parts.leftLeg.rotation.x = sw * 0.9
-    parts.rightLeg.rotation.x = -sw * 0.9
-    parts.leftShin.rotation.x = Math.max(0, -sw) * 1.2 + 0.15
-    parts.rightShin.rotation.x = Math.max(0, sw) * 1.2 + 0.15
-    parts.leftArm.rotation.x = -sw * 0.9
-    parts.rightArm.rotation.x = sw * 0.9
-    parts.leftForearm.rotation.x = -1.0
-    parts.rightForearm.rotation.x = -1.0
-    parts.torso.rotation.x = 0.2
-    parts.torso.rotation.y = sw * 0.15
-    parts.hip.position.y = 1.03 + Math.abs(Math.sin(p * 2)) * 0.08
+    parts.leftLeg.rotation.x = sw * 1.0
+    parts.rightLeg.rotation.x = -sw * 1.0
+    parts.leftShin.rotation.x = Math.max(0, -sw) * 1.3 + 0.15
+    parts.rightShin.rotation.x = Math.max(0, sw) * 1.3 + 0.15
+    parts.leftArm.rotation.x = -sw * 1.0
+    parts.rightArm.rotation.x = sw * 1.0
+    parts.leftForearm.rotation.x = -1.1
+    parts.rightForearm.rotation.x = -1.1
+    parts.torso.rotation.x = 0.22
+    parts.torso.rotation.y = sw * 0.18
+    parts.hip.position.y = 1.02 + Math.abs(Math.sin(p * 2)) * 0.1
     parts.head.rotation.x = -0.05
     return
   }
   if (clip === 'jump') {
-    const p = Math.min(1, t)
+    const p = Math.min(1, Math.max(0, phase))
     const arc = -Math.pow(p * 2 - 1, 2) + 1
     parts.hip.position.y = 1.05 + arc * 0.7
     parts.leftLeg.rotation.x = -0.4 + arc * 0.6
@@ -243,7 +244,7 @@ export function poseCharacter(char: Character, clip: ClipKey, t: number): void {
     return
   }
   if (clip === 'landing') {
-    const p = Math.min(1, t)
+    const p = Math.min(1, Math.max(0, phase))
     const squish = p < 0.4 ? (p / 0.4) : (1 - (p - 0.4) / 0.6)
     parts.hip.position.y = 1.05 - squish * 0.3
     parts.leftLeg.rotation.x = -0.4 - squish * 0.5
@@ -258,7 +259,7 @@ export function poseCharacter(char: Character, clip: ClipKey, t: number): void {
     return
   }
   if (clip === 'attack') {
-    const p = Math.min(1, t)
+    const p = Math.min(1, Math.max(0, phase))
     const swing = Math.sin(p * Math.PI)
     parts.rightArm.rotation.x = -1.6 + p * 3.2
     parts.rightArm.rotation.z = -0.4 + swing * 0.5
@@ -272,7 +273,7 @@ export function poseCharacter(char: Character, clip: ClipKey, t: number): void {
     return
   }
   if (clip === 'skidStop') {
-    const p = Math.min(1, t)
+    const p = Math.min(1, Math.max(0, phase))
     parts.leftLeg.rotation.x = -0.5 + p * 0.35
     parts.rightLeg.rotation.x = 0.4 - p * 0.25
     parts.leftShin.rotation.x = 0.15
@@ -285,7 +286,7 @@ export function poseCharacter(char: Character, clip: ClipKey, t: number): void {
     return
   }
   if (clip === 'takeoff') {
-    const p = Math.min(1, t)
+    const p = Math.min(1, Math.max(0, phase))
     parts.leftLeg.rotation.x = -0.7 + p * 0.6
     parts.rightLeg.rotation.x = -0.7 + p * 0.6
     parts.leftShin.rotation.x = 1.1 - p * 0.6

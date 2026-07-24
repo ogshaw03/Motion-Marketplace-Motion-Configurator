@@ -128,23 +128,27 @@ export function createPreview(options: {
     if (state.playing) {
       state.time += dt * state.speed
 
-      if (state.sequence) {
-        const step = state.sequence[state.sequenceIndex]
-        if (step) {
-          if (state.time >= step.durationSec) {
-            state.sequenceIterInStep += 1
-            state.time = 0
-            if (state.sequenceIterInStep >= step.loopCount) {
-              state.sequenceIterInStep = 0
-              state.sequenceIndex = (state.sequenceIndex + 1) % state.sequence.length
-            }
+      if (state.sequence && state.sequence.length > 0) {
+        let step = state.sequence[state.sequenceIndex]
+        if (step && state.time >= step.durationSec) {
+          state.sequenceIterInStep += 1
+          state.time = 0
+          if (state.sequenceIterInStep >= step.loopCount) {
+            state.sequenceIterInStep = 0
+            state.sequenceIndex = (state.sequenceIndex + 1) % state.sequence.length
           }
-          const clip = state.sequence[state.sequenceIndex]?.clip ?? state.currentClip
-          poseCharacter(character, clip, state.time / (state.sequence[state.sequenceIndex]?.durationSec || 1))
+          step = state.sequence[state.sequenceIndex]
+        }
+        if (step) {
+          const progress = state.time / step.durationSec
+          poseCharacter(character, step.clip, progress)
         }
       } else {
-        if (state.loop && state.time > 4) state.time = state.time % 4
-        poseCharacter(character, state.currentClip, state.time)
+        // Solo clip: use default 1-second cycle for looping poses, or 0.9s for one-shots
+        const soloDuration = ['jump', 'landing', 'attack', 'skidStop', 'takeoff'].includes(state.currentClip) ? 0.9 : 1.0
+        if (state.loop && state.time > soloDuration) state.time = state.time % soloDuration
+        const progress = Math.min(state.time / soloDuration, state.loop ? Infinity : 1)
+        poseCharacter(character, state.currentClip, progress)
       }
     }
 
