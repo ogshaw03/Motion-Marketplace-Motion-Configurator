@@ -11,6 +11,7 @@ export interface PreviewController {
   isPlaying: () => boolean
   getTime: () => number
   setSequence: (steps: { clip: ClipKey; durationSec: number; loopCount: number }[]) => void
+  frame: () => void
 }
 
 export function createPreview(options: {
@@ -18,7 +19,14 @@ export function createPreview(options: {
   loop?: boolean
   background?: number
   showGround?: boolean
+  /** true = ユーザー操作不可、ゆっくり自動回転 (Top hero用). default false. */
+  autoOrbit?: boolean
+  /** true = Maya風カメラ操作を有効 (default true, autoOrbit時は無効) */
+  interactive?: boolean
 } = {}): PreviewController {
+  const autoOrbit = options.autoOrbit ?? false
+  const interactive = (options.interactive ?? true) && !autoOrbit
+
   const el = document.createElement('div')
   el.style.position = 'absolute'
   el.style.inset = '0'
@@ -36,14 +44,13 @@ export function createPreview(options: {
   renderer.domElement.style.width = '100%'
   renderer.domElement.style.height = '100%'
   renderer.domElement.style.display = 'block'
+  if (interactive) renderer.domElement.style.cursor = 'default'
   renderer.shadowMap.enabled = true
   renderer.shadowMap.type = THREE.PCFSoftShadowMap
   renderer.outputColorSpace = THREE.SRGBColorSpace
   el.appendChild(renderer.domElement)
 
   const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100)
-  camera.position.set(2.4, 1.7, 3.4)
-  camera.lookAt(0, 1.0, 0)
 
   const hemi = new THREE.HemisphereLight(0xffffff, 0x334455, 0.6)
   scene.add(hemi)
@@ -77,7 +84,6 @@ export function createPreview(options: {
     ground.receiveShadow = true
     scene.add(ground)
 
-    // grid ring
     const ring = new THREE.Mesh(
       new THREE.RingGeometry(3.4, 3.5, 64),
       new THREE.MeshBasicMaterial({ color: 0x2a2f40 }),
@@ -104,7 +110,53 @@ export function createPreview(options: {
     sequenceIterInStep: 0,
   }
 
-  let cameraAngle = 0
+  // --- Camera state (Maya-style orbit around pivot) ---
+  const DEFAULT_PIVOT = new THREE.Vector3(0, 1.05, 0)
+  const DEFAULT_RADIUS = 4.2
+  const DEFAULT_THETA = Math.PI / 4      // azimuth (yaw)
+  const DEFAULT_PHI = Math.PI / 2 - 0.25  // polar from +Y down (slightly above horizon)
+  const cam = {
+    pivot: DEFAULT_PIVOT.clone(),
+    radius: DEFAULT_RADIUS,
+    theta: DEFAULT_THETA,
+    phi: DEFAULT_PHI,
+  }
+  const RADIUS_MIN = 1.5
+  const RADIUS_MAX = 20
+  const PHI_MIN = 0.15
+  const PHI_MAX = Math.PI - 0.15
+
+  let cameraOrbitDeg = 0 // for auto-orbit fallback
+
+  function applyCamera() {
+    if (autoOrbit) {
+      const aspect = camera.aspect
+      const r = aspect < 1.1 ? 5.2 : aspect < 1.5 ? 4.6 : 4.0
+      const camY = aspect < 1.1 ? 1.3 : 1.5
+      camera.position.x = Math.sin(cameraOrbitDeg) * r
+      camera.position.z = Math.cos(cameraOrbitDeg) * r
+      camera.position.y = camY
+      camera.lookAt(0, 1.05, 0)
+      return
+    }
+    const sinPhi = Math.sin(cam.phi)
+    camera.position.set(
+      cam.pivot.x + cam.radius * sinPhi * Math.sin(cam.theta),
+      cam.pivot.y + cam.radius * Math.cos(cam.phi),
+      cam.pivot.z + cam.radius * sinPhi * Math.cos(cam.theta),
+    )
+    camera.lookAt(cam.pivot)
+  }
+
+  function frame() {
+    cam.pivot.copy(DEFAULT_PIVOT)
+    // If autoOrbit, radius/theta/phi are ignored anyway; still reset for consistency.
+    const aspect = camera.aspect
+    cam.radius = aspect < 1.1 ? 5.2 : aspect < 1.5 ? 4.8 : DEFAULT_RADIUS
+    cam.theta = DEFAULT_THETA
+    cam.phi = DEFAULT_PHI
+    applyCamera()
+  }
 
   function resize() {
     const w = el.clientWidth || 400
@@ -114,9 +166,121 @@ export function createPreview(options: {
     camera.updateProjectionMatrix()
   }
 
-  const ro = new ResizeObserver(resize)
+  const ro = new ResizeObserver(() => {
+    resize()
+    if (!interactive) frame() // re-frame for hero-style layouts
+  })
   ro.observe(el)
   resize()
+  frame()
+
+  // --- Maya-style camera input ---
+  type DragMode = 'tumble' | 'track' | 'dolly' | null
+  const drag = { mode: null as DragMode, lastX: 0, lastY: 0, button: -1 }
+
+  const onContextMenu = (e: MouseEvent) => {
+    // Prevent right-click menu inside the canvas
+    e.preventDefault()
+  }
+
+  const modeForButton = (e: MouseEvent): DragMode => {
+    if (!e.altKey) return null
+    if (e.button === 0) return 'tumble'
+    if (e.button === 1) return 'track'
+    if (e.button === 2) return 'dolly'
+    return null
+  }
+
+  const onPointerDown = (e: PointerEvent) => {
+    if (!interactive) return
+    const mode = modeForButton(e)
+    if (!mode) return
+    e.preventDefault()
+    drag.mode = mode
+    drag.lastX = e.clientX
+    drag.lastY = e.clientY
+    drag.button = e.button
+    ;(e.target as Element).setPointerCapture?.(e.pointerId)
+    renderer.domElement.style.cursor =
+      mode === 'tumble' ? 'grabbing' :
+      mode === 'track' ? 'move' :
+      'ns-resize'
+  }
+
+  const onPointerMove = (e: PointerEvent) => {
+    if (!interactive || !drag.mode) return
+    const dx = e.clientX - drag.lastX
+    const dy = e.clientY - drag.lastY
+    drag.lastX = e.clientX
+    drag.lastY = e.clientY
+
+    if (drag.mode === 'tumble') {
+      cam.theta -= dx * 0.008
+      cam.phi -= dy * 0.008
+      cam.phi = Math.max(PHI_MIN, Math.min(PHI_MAX, cam.phi))
+    } else if (drag.mode === 'track') {
+      // Pan the pivot in the camera's screen-space right/up axes
+      const right = new THREE.Vector3()
+      const up = new THREE.Vector3()
+      camera.matrixWorld.extractBasis(right, up, new THREE.Vector3())
+      const scale = cam.radius * 0.0015
+      cam.pivot.addScaledVector(right, -dx * scale)
+      cam.pivot.addScaledVector(up, dy * scale)
+    } else if (drag.mode === 'dolly') {
+      // Horizontal + vertical drag both zoom (Maya combines).
+      const factor = Math.exp((dx + dy) * 0.005)
+      cam.radius = Math.max(RADIUS_MIN, Math.min(RADIUS_MAX, cam.radius * factor))
+    }
+  }
+
+  const onPointerUp = (e: PointerEvent) => {
+    if (!drag.mode) return
+    drag.mode = null
+    drag.button = -1
+    ;(e.target as Element).releasePointerCapture?.(e.pointerId)
+    renderer.domElement.style.cursor = 'default'
+  }
+
+  const onWheel = (e: WheelEvent) => {
+    if (!interactive) return
+    e.preventDefault()
+    const factor = Math.exp(e.deltaY * 0.0015)
+    cam.radius = Math.max(RADIUS_MIN, Math.min(RADIUS_MAX, cam.radius * factor))
+  }
+
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (!interactive) return
+    if (e.key === 'f' || e.key === 'F') {
+      // Frame character
+      if (document.activeElement !== document.body &&
+          document.activeElement instanceof HTMLInputElement) return
+      frame()
+    }
+  }
+
+  if (interactive) {
+    renderer.domElement.addEventListener('contextmenu', onContextMenu)
+    renderer.domElement.addEventListener('pointerdown', onPointerDown)
+    renderer.domElement.addEventListener('pointermove', onPointerMove)
+    renderer.domElement.addEventListener('pointerup', onPointerUp)
+    renderer.domElement.addEventListener('pointercancel', onPointerUp)
+    renderer.domElement.addEventListener('wheel', onWheel, { passive: false })
+    window.addEventListener('keydown', onKeyDown)
+  }
+
+  // Overlay hint (small text bottom-right, autohides)
+  let hintEl: HTMLElement | null = null
+  if (interactive) {
+    hintEl = document.createElement('div')
+    hintEl.textContent = 'Alt+Drag: Tumble / Track / Dolly  ·  Wheel: Zoom  ·  F: Frame'
+    hintEl.style.cssText =
+      'position: absolute; right: 8px; top: 8px; padding: 4px 8px; ' +
+      'background: rgba(14,15,19,0.7); border: 1px solid rgba(255,255,255,0.08); ' +
+      'border-radius: 4px; color: #a2a9b9; font-size: 10px; ' +
+      'font-family: ui-monospace, monospace; pointer-events: none; ' +
+      'letter-spacing: 0.02em;'
+    el.appendChild(hintEl)
+  }
 
   let raf = 0
   function loop() {
@@ -144,7 +308,6 @@ export function createPreview(options: {
           poseCharacter(character, step.clip, progress)
         }
       } else {
-        // Solo clip: use default 1-second cycle for looping poses, or 0.9s for one-shots
         const soloDuration = ['jump', 'landing', 'attack', 'skidStop', 'takeoff'].includes(state.currentClip) ? 0.9 : 1.0
         if (state.loop && state.time > soloDuration) state.time = state.time % soloDuration
         const progress = Math.min(state.time / soloDuration, state.loop ? Infinity : 1)
@@ -152,15 +315,10 @@ export function createPreview(options: {
       }
     }
 
-    cameraAngle += dt * 0.05
-    const aspect = camera.aspect
-    const r = aspect < 1.1 ? 5.2 : aspect < 1.5 ? 4.6 : 4.0
-    const camY = aspect < 1.1 ? 1.3 : 1.5
-    camera.position.x = Math.sin(cameraAngle) * r
-    camera.position.z = Math.cos(cameraAngle) * r
-    camera.position.y = camY
-    camera.lookAt(0, 1.05, 0)
-
+    if (autoOrbit) {
+      cameraOrbitDeg += dt * 0.05
+    }
+    applyCamera()
     renderer.render(scene, camera)
   }
   loop()
@@ -170,6 +328,15 @@ export function createPreview(options: {
     dispose: () => {
       cancelAnimationFrame(raf)
       ro.disconnect()
+      if (interactive) {
+        renderer.domElement.removeEventListener('contextmenu', onContextMenu)
+        renderer.domElement.removeEventListener('pointerdown', onPointerDown)
+        renderer.domElement.removeEventListener('pointermove', onPointerMove)
+        renderer.domElement.removeEventListener('pointerup', onPointerUp)
+        renderer.domElement.removeEventListener('pointercancel', onPointerUp)
+        renderer.domElement.removeEventListener('wheel', onWheel)
+        window.removeEventListener('keydown', onKeyDown)
+      }
       renderer.dispose()
       character.root.traverse((obj: THREE.Object3D) => {
         if ((obj as THREE.Mesh).geometry) (obj as THREE.Mesh).geometry.dispose()
@@ -203,5 +370,6 @@ export function createPreview(options: {
       state.sequenceIterInStep = 0
       state.time = 0
     },
+    frame,
   }
 }

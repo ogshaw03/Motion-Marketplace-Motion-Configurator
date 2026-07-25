@@ -11,7 +11,7 @@ export function TopPage(): HTMLElement {
   const previewHost = h('div', { class: 'hero-preview' }, [])
   let preview: PreviewController | null = null
   queueMicrotask(() => {
-    preview = createPreview({ background: 0x14161d, showGround: true })
+    preview = createPreview({ background: 0x14161d, showGround: true, autoOrbit: true })
     previewHost.appendChild(preview.el)
     preview.setSequence([
       { clip: 'run', durationSec: 0.6, loopCount: 3 },

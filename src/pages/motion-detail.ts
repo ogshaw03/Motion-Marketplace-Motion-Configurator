@@ -157,8 +157,9 @@ function playControls(preview: PreviewController): HTMLElement {
       playIcon,
       h('button', {
         class: 'btn small',
-        onclick: () => preview.setClip((preview as any).state?.currentClip || 'idle'),
-      }, ['↻']),
+        title: 'Frame character (F)',
+        onclick: () => preview.frame(),
+      }, ['⟲ Frame']),
     ]),
     h('div', { class: 'timing' }, ['00:00 / --:--']),
     h('div', { class: 'right' }, [

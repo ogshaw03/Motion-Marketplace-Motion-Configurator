@@ -596,10 +596,20 @@ function makePlayControls(
     makeSpeedBtn('2×', 2.0),
   ])
 
+  const frameBtn = h('button', {
+    class: 'btn small',
+    title: 'Frame character (F)',
+    onclick: () => {
+      const p = getPreview()
+      p?.frame()
+    },
+  }, ['⟲ Frame']) as HTMLButtonElement
+
   return h('div', { class: 'play-controls' }, [
     h('div', { class: 'left' }, [
       h('button', { class: 'btn small primary', onclick: onPlayAll }, ['▶ PLAY ALL']),
       playBtn,
+      frameBtn,
     ]),
     h('div', { class: 'timing' }, ['SEQUENCE PREVIEW']),
     speedGroup,
