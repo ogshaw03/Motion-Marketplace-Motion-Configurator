@@ -3,6 +3,7 @@ import type {
   DB,
   FeaturedSequence,
   Motion,
+  RecommendedBlend,
 } from './types'
 
 const creators: Creator[] = [
@@ -40,6 +41,41 @@ const creators: Creator[] = [
   },
 ]
 
+// Recommended blend defaults by category / role.
+// Creators can override per motion; these are sensible starting points.
+const RB = {
+  loopSmooth: (): RecommendedBlend => ({
+    inMinSec: 0.1, inMaxSec: 0.25,
+    outMinSec: 0.1, outMaxSec: 0.25,
+  }),
+  loopSnappy: (): RecommendedBlend => ({
+    inMinSec: 0.05, inMaxSec: 0.15,
+    outMinSec: 0.05, outMaxSec: 0.15,
+  }),
+  idle: (): RecommendedBlend => ({
+    inMinSec: 0.15, inMaxSec: 0.35,
+    outMinSec: 0.15, outMaxSec: 0.35,
+  }),
+  actionOneShot: (): RecommendedBlend => ({
+    inMinSec: 0.05, inMaxSec: 0.15,
+    outMinSec: 0.1, outMaxSec: 0.2,
+  }),
+  landing: (): RecommendedBlend => ({
+    inMinSec: 0.02, inMaxSec: 0.1,
+    outMinSec: 0.1, outMaxSec: 0.25,
+  }),
+  designedSoft: (note?: string): RecommendedBlend => ({
+    inMinSec: 0.03, inMaxSec: 0.15,
+    outMinSec: 0.05, outMaxSec: 0.15,
+    designerNote: note,
+  }),
+  designedSnappy: (note?: string): RecommendedBlend => ({
+    inMinSec: 0.02, inMaxSec: 0.08,
+    outMinSec: 0.02, outMaxSec: 0.1,
+    designerNote: note,
+  }),
+}
+
 const motions: Motion[] = [
   {
     id: 'anime-run',
@@ -64,6 +100,7 @@ const motions: Motion[] = [
       endCondition: 'ground',
       durationSec: 0.6,
     },
+    recommendedBlend: RB.loopSnappy(),
     animationClipKey: 'run',
     thumbColor: '#e05b8f',
   },
@@ -90,6 +127,7 @@ const motions: Motion[] = [
       endCondition: 'ground',
       durationSec: 0.7,
     },
+    recommendedBlend: RB.loopSmooth(),
     animationClipKey: 'run',
     thumbColor: '#ffb547',
   },
@@ -116,6 +154,7 @@ const motions: Motion[] = [
       endCondition: 'ground',
       durationSec: 1.1,
     },
+    recommendedBlend: RB.loopSmooth(),
     animationClipKey: 'walk',
     thumbColor: '#4c8dff',
   },
@@ -142,6 +181,7 @@ const motions: Motion[] = [
       endCondition: 'ground',
       durationSec: 3.2,
     },
+    recommendedBlend: RB.idle(),
     animationClipKey: 'idle',
     thumbColor: '#4c8dff',
   },
@@ -168,6 +208,7 @@ const motions: Motion[] = [
       endCondition: 'ground',
       durationSec: 2.4,
     },
+    recommendedBlend: RB.idle(),
     animationClipKey: 'idle',
     thumbColor: '#e05b8f',
   },
@@ -194,6 +235,7 @@ const motions: Motion[] = [
       endCondition: 'airborne',
       durationSec: 0.9,
     },
+    recommendedBlend: RB.actionOneShot(),
     animationClipKey: 'jump',
     thumbColor: '#ffb547',
   },
@@ -219,6 +261,11 @@ const motions: Motion[] = [
       startCondition: 'ground',
       endCondition: 'airborne',
       durationSec: 0.7,
+    },
+    recommendedBlend: {
+      inMinSec: 0.02, inMaxSec: 0.08,
+      outMinSec: 0.05, outMaxSec: 0.15,
+      designerNote: 'Anticipation should read; keep in-blend short.',
     },
     animationClipKey: 'jump',
     thumbColor: '#e05b8f',
@@ -246,6 +293,7 @@ const motions: Motion[] = [
       endCondition: 'ground',
       durationSec: 0.8,
     },
+    recommendedBlend: RB.landing(),
     animationClipKey: 'landing',
     thumbColor: '#e05b8f',
   },
@@ -275,6 +323,9 @@ const motions: Motion[] = [
       endCondition: 'ground',
       durationSec: 0.7,
     },
+    recommendedBlend: RB.designedSoft(
+      'In≤0.05でクリスプ、それ以上でソフト。Out はプラント後の重みを潰さないため 0.05〜0.10 が推奨。',
+    ),
     animationClipKey: 'skidStop',
     thumbColor: '#ffb547',
   },
@@ -304,6 +355,9 @@ const motions: Motion[] = [
       endCondition: 'ground',
       durationSec: 0.5,
     },
+    recommendedBlend: RB.designedSnappy(
+      '止まりの決めポーズが命。Blend は極力短く。',
+    ),
     animationClipKey: 'skidStop',
     thumbColor: '#e05b8f',
   },
@@ -332,6 +386,11 @@ const motions: Motion[] = [
       startCondition: 'ground',
       endCondition: 'airborne',
       durationSec: 0.5,
+    },
+    recommendedBlend: {
+      inMinSec: 0.05, inMaxSec: 0.15,
+      outMinSec: 0.02, outMaxSec: 0.08,
+      designerNote: 'Anticipationを潰さないため Out はタイトに。',
     },
     animationClipKey: 'takeoff',
     thumbColor: '#ffb547',
@@ -362,6 +421,7 @@ const motions: Motion[] = [
       endCondition: 'airborne',
       durationSec: 0.35,
     },
+    recommendedBlend: RB.designedSnappy('全体が速いので Blend は最小に。'),
     animationClipKey: 'takeoff',
     thumbColor: '#e05b8f',
   },
@@ -387,6 +447,11 @@ const motions: Motion[] = [
       startCondition: 'ground',
       endCondition: 'ground',
       durationSec: 0.8,
+    },
+    recommendedBlend: {
+      inMinSec: 0.05, inMaxSec: 0.12,
+      outMinSec: 0.1, outMaxSec: 0.2,
+      designerNote: 'In が長いと Anticipation が薄まる。',
     },
     animationClipKey: 'attack',
     thumbColor: '#e05b8f',
@@ -414,6 +479,11 @@ const motions: Motion[] = [
       endCondition: 'ground',
       durationSec: 1.1,
     },
+    recommendedBlend: {
+      inMinSec: 0.08, inMaxSec: 0.15,
+      outMinSec: 0.15, outMaxSec: 0.3,
+      designerNote: '決めポーズを見せたいので Out は長め推奨。',
+    },
     animationClipKey: 'attack',
     thumbColor: '#e05b8f',
   },
@@ -440,6 +510,7 @@ const motions: Motion[] = [
       endCondition: 'ground',
       durationSec: 0.6,
     },
+    recommendedBlend: RB.actionOneShot(),
     animationClipKey: 'idle',
     thumbColor: '#e05b8f',
   },
@@ -466,6 +537,7 @@ const motions: Motion[] = [
       endCondition: 'ground',
       durationSec: 0.9,
     },
+    recommendedBlend: RB.loopSmooth(),
     animationClipKey: 'idle',
     thumbColor: '#4c8dff',
   },
@@ -511,7 +583,81 @@ const featuredSequences: FeaturedSequence[] = [
   },
 ]
 
+// Slider absolute bounds. Rec-band overlays this to show the "green zone".
+export const BLEND_SLIDER_MAX_SEC = 0.6
+
+// Default blend length for Auto transitions, computed from both sides'
+// recommended out/in maxes (whichever is tighter).
+export function defaultAutoBlendSec(fromId: string, toId: string): number {
+  const a = getMotion(fromId)
+  const b = getMotion(toId)
+  if (!a || !b) return 0.2
+  const outMax = a.recommendedBlend.outMaxSec
+  const inMax = b.recommendedBlend.inMaxSec
+  return Math.max(0.05, Math.min(outMax, inMax))
+}
+
+// Default in-blend for a Designed Transition inserted between A and D.
+export function defaultDesignedInBlendSec(fromId: string, designedId: string): number {
+  const a = getMotion(fromId)
+  const d = getMotion(designedId)
+  if (!a || !d) return 0.08
+  return Math.max(0.02, Math.min(a.recommendedBlend.outMaxSec, d.recommendedBlend.inMaxSec))
+}
+
+// Default out-blend for a Designed Transition inserted between D and B.
+export function defaultDesignedOutBlendSec(designedId: string, toId: string): number {
+  const d = getMotion(designedId)
+  const b = getMotion(toId)
+  if (!d || !b) return 0.08
+  return Math.max(0.02, Math.min(d.recommendedBlend.outMaxSec, b.recommendedBlend.inMaxSec))
+}
+
+// Intersection of "recommended band" from two motions' facing ends.
+export function recommendedBandSec(
+  motionA: Motion | undefined,
+  side: 'out',
+  motionB: Motion | undefined,
+  sideB: 'in',
+): { minSec: number; maxSec: number } | null {
+  if (!motionA || !motionB) return null
+  const aMin = side === 'out' ? motionA.recommendedBlend.outMinSec : motionA.recommendedBlend.inMinSec
+  const aMax = side === 'out' ? motionA.recommendedBlend.outMaxSec : motionA.recommendedBlend.inMaxSec
+  const bMin = sideB === 'in' ? motionB.recommendedBlend.inMinSec : motionB.recommendedBlend.outMinSec
+  const bMax = sideB === 'in' ? motionB.recommendedBlend.inMaxSec : motionB.recommendedBlend.outMaxSec
+  const min = Math.max(aMin, bMin)
+  const max = Math.min(aMax, bMax)
+  if (min > max) return { minSec: Math.min(aMin, bMin), maxSec: Math.max(aMax, bMax) }
+  return { minSec: min, maxSec: max }
+}
+
 export function createDB(mock: boolean): DB {
+  const find = (id: string) => motions.find((m) => m.id === id)
+  const autoBlend = (fromId: string, toId: string) => {
+    const a = find(fromId), b = find(toId)
+    if (!a || !b) return 0.2
+    return Math.max(0.05, Math.min(a.recommendedBlend.outMaxSec, b.recommendedBlend.inMaxSec))
+  }
+
+  const initialSteps: DB['currentSequence']['steps'] = [
+    {
+      motionId: 'anime-run',
+      loopCount: 2,
+      transitionToNext: { kind: 'Auto', blendLengthSec: autoBlend('anime-run', 'powerful-takeoff') },
+    },
+    {
+      motionId: 'powerful-takeoff',
+      loopCount: 1,
+      transitionToNext: { kind: 'Auto', blendLengthSec: autoBlend('powerful-takeoff', 'hero-jump') },
+    },
+    {
+      motionId: 'hero-jump',
+      loopCount: 1,
+      transitionToNext: { kind: 'Auto', blendLengthSec: autoBlend('hero-jump', 'anime-landing') },
+    },
+    { motionId: 'anime-landing', loopCount: 1 },
+  ]
+
   return {
     creators,
     motions,
@@ -520,12 +666,7 @@ export function createDB(mock: boolean): DB {
     currentSequence: {
       id: 'working-sequence',
       name: 'My Sequence',
-      steps: [
-        { motionId: 'anime-run', loopCount: 2, transitionToNext: { kind: 'Auto', blendLengthSec: 0.2 } },
-        { motionId: 'powerful-takeoff', loopCount: 1, transitionToNext: { kind: 'Auto', blendLengthSec: 0.1 } },
-        { motionId: 'hero-jump', loopCount: 1, transitionToNext: { kind: 'Auto', blendLengthSec: 0.15 } },
-        { motionId: 'anime-landing', loopCount: 1 },
-      ],
+      steps: initialSteps,
     },
     cart: [],
     mock,
@@ -541,7 +682,7 @@ export function initDB(): DB {
 }
 
 export function getMotion(id: string): Motion | undefined {
-  return window.DB.motions.find((m) => m.id === id)
+  return window.DB?.motions.find((m) => m.id === id)
 }
 
 export function getCreator(id: string): Creator | undefined {

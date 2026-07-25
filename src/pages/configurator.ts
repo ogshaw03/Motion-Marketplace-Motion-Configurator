@@ -1,14 +1,26 @@
 import { h, yen } from '../util/dom'
 import { AppHeader } from '../components/header'
-import { candidateNextMotions, compatibility, getCreator, getMotion, isOwned, totalMissingPrice } from '../db'
+import {
+  BLEND_SLIDER_MAX_SEC,
+  candidateNextMotions,
+  compatibility,
+  defaultAutoBlendSec,
+  defaultDesignedInBlendSec,
+  defaultDesignedOutBlendSec,
+  getCreator,
+  getMotion,
+  isOwned,
+  recommendedBandSec,
+  totalMissingPrice,
+} from '../db'
 import { createPreview, type PreviewController } from '../three/preview'
 import type { ClipKey } from '../three/character'
-import type { Motion, SequenceStep } from '../types'
+import type { Motion, RecommendedBlend, SequenceStep, Transition } from '../types'
 import { href, navigate } from '../router'
 
 export function ConfiguratorPage(_params: Record<string, string>): HTMLElement {
-  const params = new URLSearchParams(window.location.hash.split('?')[1] || '')
-  const seqParam = params.get('seq')
+  const urlParams = new URLSearchParams(window.location.hash.split('?')[1] || '')
+  const seqParam = urlParams.get('seq')
   if (seqParam) {
     const fs = window.DB.featuredSequences.find((s) => s.id === seqParam)
     if (fs) {
@@ -16,7 +28,15 @@ export function ConfiguratorPage(_params: Record<string, string>): HTMLElement {
         motionId: s.motionId,
         loopCount: s.loopCount,
         transitionToNext:
-          i < arr.length - 1 ? { kind: 'Auto' as const, blendLengthSec: 0.2 } : undefined,
+          i < arr.length - 1
+            ? {
+                kind: 'Auto' as const,
+                blendLengthSec: defaultAutoBlendSec(
+                  s.motionId,
+                  arr[i + 1].motionId,
+                ),
+              }
+            : undefined,
       }))
     }
   }
@@ -30,7 +50,9 @@ export function ConfiguratorPage(_params: Record<string, string>): HTMLElement {
   queueMicrotask(() => {
     preview = createPreview({ clip: 'idle', loop: true })
     previewHost.appendChild(preview.el)
-    previewHost.appendChild(makePlayControls(() => preview && playAllSequence(preview), () => preview))
+    previewHost.appendChild(
+      makePlayControls(() => preview && playAllSequence(preview), () => preview),
+    )
     applyActiveClipToPreview()
   })
 
@@ -56,9 +78,15 @@ export function ConfiguratorPage(_params: Record<string, string>): HTMLElement {
       }
       if (idx < steps.length - 1) {
         const trans = step.transitionToNext
-        if (trans?.kind === 'Designed' && trans.designedMotionId) {
+        if (trans?.kind === 'Designed') {
           const t = getMotion(trans.designedMotionId)
-          if (t) seq.push({ clip: t.animationClipKey as ClipKey, durationSec: t.metadata.durationSec, loopCount: 1 })
+          if (t) {
+            seq.push({
+              clip: t.animationClipKey as ClipKey,
+              durationSec: t.metadata.durationSec,
+              loopCount: 1,
+            })
+          }
         }
       }
     })
@@ -68,7 +96,8 @@ export function ConfiguratorPage(_params: Record<string, string>): HTMLElement {
   const sidePanel = h('div', { class: 'side-panel' }, [])
   const sequenceArea = h('div', { class: 'sequence-area' }, [])
   const priceStrip = h('div', {
-    style: 'display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--bg-elev-2); border: 1px solid var(--border); border-radius: var(--radius-sm); margin-top: 10px;',
+    style:
+      'display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--bg-elev-2); border: 1px solid var(--border); border-radius: var(--radius-sm); margin-top: 10px;',
   }, [])
 
   function renderSide() {
@@ -91,7 +120,9 @@ export function ConfiguratorPage(_params: Record<string, string>): HTMLElement {
           style:
             'padding: 10px; background: var(--bg-elev-2); border: 1px solid var(--border); border-radius: var(--radius-sm);',
         }, [
-          h('div', { style: 'font-weight: 600; margin-bottom: 4px;' }, [currentMotion.name]),
+          h('div', { style: 'font-weight: 600; margin-bottom: 4px;' }, [
+            currentMotion.name,
+          ]),
           h('div', { style: 'color: var(--text-dim); font-size: 12px;' }, [
             `${currentMotion.state} · ${currentMotion.style}`,
           ]),
@@ -111,17 +142,16 @@ export function ConfiguratorPage(_params: Record<string, string>): HTMLElement {
         h('div', {
           class: 'next-motion-item',
           onclick: () => {
-            window.DB.currentSequence.steps.push({
-              motionId: m.id,
-              loopCount: 1,
-              transitionToNext: { kind: 'Auto', blendLengthSec: 0.2 },
-            })
-            // add auto transition to previous step
-            const prev = window.DB.currentSequence.steps[window.DB.currentSequence.steps.length - 2]
+            const prevSteps = window.DB.currentSequence.steps
+            const prev = prevSteps[prevSteps.length - 1]
             if (prev && !prev.transitionToNext) {
-              prev.transitionToNext = { kind: 'Auto', blendLengthSec: 0.2 }
+              prev.transitionToNext = {
+                kind: 'Auto',
+                blendLengthSec: defaultAutoBlendSec(prev.motionId, m.id),
+              }
             }
-            activeStepIndex = window.DB.currentSequence.steps.length - 1
+            prevSteps.push({ motionId: m.id, loopCount: 1 })
+            activeStepIndex = prevSteps.length - 1
             renderAll()
           },
         }, [
@@ -133,7 +163,10 @@ export function ConfiguratorPage(_params: Record<string, string>): HTMLElement {
             h('div', { class: 'name' }, [m.name]),
             h('div', { class: 'meta' }, [`${m.state} · ${m.style}`]),
           ]),
-          h('div', { style: 'display: flex; flex-direction: column; align-items: flex-end; gap: 3px;' }, [
+          h('div', {
+            style:
+              'display: flex; flex-direction: column; align-items: flex-end; gap: 3px;',
+          }, [
             h('span', {
               class: `chip ${compat.toLowerCase()}`,
               style: 'font-size: 10px; padding: 1px 6px;',
@@ -167,11 +200,7 @@ export function ConfiguratorPage(_params: Record<string, string>): HTMLElement {
           ]),
           h('div', { class: 'toggle-row' }, [
             h('span', {}, ['Blend Length']),
-            h('span', {}, ['0.20s']),
-          ]),
-          h('div', { class: 'toggle-row' }, [
-            h('span', {}, ['Playback Speed']),
-            h('span', {}, ['1.0×']),
+            h('span', {}, ['Transitionノードから個別に調整']),
           ]),
           h('div', { class: 'toggle-row' }, [
             h('span', {}, ['Root / In-Place']),
@@ -191,8 +220,9 @@ export function ConfiguratorPage(_params: Record<string, string>): HTMLElement {
     }
     const mA = getMotion(stepA.motionId)
     const mB = getMotion(stepB.motionId)
-    const currentKind = stepA.transitionToNext?.kind ?? 'Auto'
-    const currentDesignedId = stepA.transitionToNext?.designedMotionId
+    const trans = stepA.transitionToNext
+    const currentKind = trans?.kind ?? 'Auto'
+    const currentDesignedId = trans?.kind === 'Designed' ? trans.designedMotionId : undefined
 
     host.appendChild(
       h('div', { style: 'display: flex; align-items: center; gap: 8px;' }, [
@@ -201,30 +231,50 @@ export function ConfiguratorPage(_params: Record<string, string>): HTMLElement {
       ]),
     )
     host.appendChild(
-      h('div', { style: 'padding: 10px; background: var(--bg-elev-2); border: 1px solid var(--border); border-radius: var(--radius-sm); display: flex; align-items: center; gap: 8px; font-size: 13px;' }, [
+      h('div', {
+        style:
+          'padding: 10px; background: var(--bg-elev-2); border: 1px solid var(--border); border-radius: var(--radius-sm); display: flex; align-items: center; gap: 8px; font-size: 13px;',
+      }, [
         h('div', {}, [mA?.name || '?']),
         h('span', { style: 'color: var(--text-mute);' }, ['→']),
         h('div', {}, [mB?.name || '?']),
       ]),
     )
 
-    const setTransition = (kind: 'Auto' | 'Designed', designedId?: string) => {
+    const setAuto = () => {
       stepA.transitionToNext = {
-        kind,
-        blendLengthSec: 0.2,
+        kind: 'Auto',
+        blendLengthSec:
+          trans?.kind === 'Auto'
+            ? trans.blendLengthSec
+            : defaultAutoBlendSec(stepA.motionId, stepB.motionId),
+      }
+      renderAll()
+    }
+    const setDesigned = (designedId: string) => {
+      const keepIn = trans?.kind === 'Designed' && trans.designedMotionId === designedId ? trans.inBlendSec : defaultDesignedInBlendSec(stepA.motionId, designedId)
+      const keepOut = trans?.kind === 'Designed' && trans.designedMotionId === designedId ? trans.outBlendSec : defaultDesignedOutBlendSec(designedId, stepB.motionId)
+      stepA.transitionToNext = {
+        kind: 'Designed',
         designedMotionId: designedId,
+        inBlendSec: keepIn,
+        outBlendSec: keepOut,
       }
       renderAll()
     }
 
+    // AUTO group
     host.appendChild(h('h3', { style: 'margin-top: 10px;' }, ['AUTO']))
     host.appendChild(
       h('div', {
         class: 'next-motion-item',
         style: currentKind === 'Auto' ? 'border-color: var(--accent);' : '',
-        onclick: () => setTransition('Auto'),
+        onclick: setAuto,
       }, [
-        h('div', { class: 'swatch', style: 'background: linear-gradient(135deg, #4c8dff 0%, #12141c 100%);' }, []),
+        h('div', {
+          class: 'swatch',
+          style: 'background: linear-gradient(135deg, #4c8dff 0%, #12141c 100%);',
+        }, []),
         h('div', { class: 'info' }, [
           h('div', { class: 'name' }, ['Auto Transition']),
           h('div', { class: 'meta' }, ['Phase-aware Blend']),
@@ -233,6 +283,24 @@ export function ConfiguratorPage(_params: Record<string, string>): HTMLElement {
       ]),
     )
 
+    if (trans?.kind === 'Auto') {
+      const band = recommendedBandSec(mA, 'out', mB, 'in')
+      host.appendChild(
+        blendSlider({
+          label: 'Blend Length',
+          valueSec: trans.blendLengthSec,
+          band,
+          onChange: (v) => {
+            if (stepA.transitionToNext?.kind === 'Auto') {
+              stepA.transitionToNext.blendLengthSec = v
+            }
+            renderSequence()
+          },
+        }),
+      )
+    }
+
+    // DESIGNED group
     host.appendChild(h('h3', { style: 'margin-top: 12px;' }, ['DESIGNED']))
     const designedCandidates = window.DB.motions.filter((m) => {
       if (!m.isDesignedTransition) return false
@@ -250,13 +318,17 @@ export function ConfiguratorPage(_params: Record<string, string>): HTMLElement {
     } else {
       designedCandidates.forEach((m: Motion) => {
         const owned = isOwned(m.id)
+        const selected = currentDesignedId === m.id
         host.appendChild(
           h('div', {
             class: 'next-motion-item',
-            style: currentDesignedId === m.id ? 'border-color: var(--accent);' : '',
-            onclick: () => setTransition('Designed', m.id),
+            style: selected ? 'border-color: var(--accent);' : '',
+            onclick: () => setDesigned(m.id),
           }, [
-            h('div', { class: 'swatch', style: `background: linear-gradient(135deg, ${m.thumbColor} 0%, #12141c 100%);` }, []),
+            h('div', {
+              class: 'swatch',
+              style: `background: linear-gradient(135deg, ${m.thumbColor} 0%, #12141c 100%);`,
+            }, []),
             h('div', { class: 'info' }, [
               h('div', { class: 'name' }, [m.name]),
               h('div', { class: 'meta' }, [`${getCreator(m.creatorId)?.name || '?'} · ${m.style}`]),
@@ -266,6 +338,54 @@ export function ConfiguratorPage(_params: Record<string, string>): HTMLElement {
               : h('span', { style: 'font-size: 11px; color: var(--text-mute);' }, [yen(m.price)]),
           ]),
         )
+
+        // If this designed motion is currently selected, render two sliders + designer note
+        if (selected && stepA.transitionToNext?.kind === 'Designed') {
+          const designed = m
+          const inBand = recommendedBandSec(mA, 'out', designed, 'in')
+          const outBand = recommendedBandSec(designed, 'out', mB, 'in')
+
+          host.appendChild(
+            h('div', {
+              style:
+                'padding: 12px; background: var(--bg-elev-2); border: 1px solid var(--border); border-radius: var(--radius-sm); display: flex; flex-direction: column; gap: 12px;',
+            }, [
+              h('div', {
+                style:
+                  'display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-mute);',
+              }, [
+                h('span', {}, [mA?.name || '?']),
+                h('span', {}, ['→']),
+                h('span', { style: 'color: var(--accent);' }, [designed.name]),
+                h('span', {}, ['→']),
+                h('span', {}, [mB?.name || '?']),
+              ]),
+              blendSlider({
+                label: `In Blend  (${mA?.name || '?'} → ${designed.name})`,
+                valueSec: stepA.transitionToNext.inBlendSec,
+                band: inBand,
+                onChange: (v) => {
+                  if (stepA.transitionToNext?.kind === 'Designed') {
+                    stepA.transitionToNext.inBlendSec = v
+                  }
+                  renderSequence()
+                },
+              }),
+              blendSlider({
+                label: `Out Blend  (${designed.name} → ${mB?.name || '?'})`,
+                valueSec: stepA.transitionToNext.outBlendSec,
+                band: outBand,
+                onChange: (v) => {
+                  if (stepA.transitionToNext?.kind === 'Designed') {
+                    stepA.transitionToNext.outBlendSec = v
+                  }
+                  renderSequence()
+                },
+              }),
+              designerNote(designed.recommendedBlend),
+            ]),
+          )
+        }
       })
     }
   }
@@ -276,7 +396,10 @@ export function ConfiguratorPage(_params: Record<string, string>): HTMLElement {
 
     const header = h('div', { class: 'sequence-header' }, [
       h('div', { style: 'display: flex; align-items: center; gap: 10px;' }, [
-        h('h3', { style: 'font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; margin: 0; font-weight: 500;' }, ['SEQUENCE']),
+        h('h3', {
+          style:
+            'font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; margin: 0; font-weight: 500;',
+        }, ['SEQUENCE']),
         h('span', { style: 'color: var(--text-mute); font-size: 12px;' }, [`${steps.length} steps`]),
       ]),
       h('div', { style: 'display: flex; gap: 8px;' }, [
@@ -285,6 +408,7 @@ export function ConfiguratorPage(_params: Record<string, string>): HTMLElement {
           onclick: () => {
             window.DB.currentSequence.steps = []
             activeStepIndex = -1
+            editingTransitionAt = null
             renderAll()
           },
         }, ['Clear']),
@@ -306,6 +430,7 @@ export function ConfiguratorPage(_params: Record<string, string>): HTMLElement {
         class: `seq-step ${i === activeStepIndex ? 'active' : ''}`,
         onclick: () => {
           activeStepIndex = i
+          editingTransitionAt = null
           applyActiveClipToPreview()
           renderAll()
         },
@@ -328,6 +453,7 @@ export function ConfiguratorPage(_params: Record<string, string>): HTMLElement {
               if (activeStepIndex >= window.DB.currentSequence.steps.length) {
                 activeStepIndex = window.DB.currentSequence.steps.length - 1
               }
+              editingTransitionAt = null
               renderAll()
             },
           }, ['✕']),
@@ -338,15 +464,24 @@ export function ConfiguratorPage(_params: Record<string, string>): HTMLElement {
       if (i < steps.length - 1) {
         const trans = step.transitionToNext
         const nextMotion = getMotion(steps[i + 1].motionId)
+        const isDesigned = trans?.kind === 'Designed'
+        const designedMotion = isDesigned ? getMotion(trans.designedMotionId) : null
         const compat = nextMotion
-          ? compatibility(motion.id, trans?.kind === 'Designed' && trans.designedMotionId ? trans.designedMotionId : nextMotion.id)
+          ? compatibility(
+              motion.id,
+              isDesigned && trans ? trans.designedMotionId : nextMotion.id,
+            )
           : 'Good'
-        const isDesigned = trans?.kind === 'Designed' && trans.designedMotionId
-        const designedMotion = isDesigned && trans.designedMotionId ? getMotion(trans.designedMotionId) : null
+
+        const blendLabel = trans
+          ? trans.kind === 'Auto'
+            ? `${trans.blendLengthSec.toFixed(2)}s`
+            : `${trans.inBlendSec.toFixed(2)} + ${trans.outBlendSec.toFixed(2)}s`
+          : '—'
 
         strip.appendChild(
           h('div', {
-            class: `transition-node ${isDesigned ? 'designed' : ''}`,
+            class: `transition-node ${isDesigned ? 'designed' : ''} ${editingTransitionAt === i ? 'editing' : ''}`,
             onclick: () => {
               editingTransitionAt = i
               renderSide()
@@ -355,8 +490,11 @@ export function ConfiguratorPage(_params: Record<string, string>): HTMLElement {
             h('span', { class: 'arrow' }, ['→']),
             h('span', {}, [isDesigned ? 'Designed' : 'Auto']),
             designedMotion
-              ? h('span', { style: 'font-size: 9px; color: var(--accent); text-align: center;' }, [designedMotion.name])
+              ? h('span', {
+                  style: 'font-size: 9px; color: var(--accent); text-align: center;',
+                }, [designedMotion.name])
               : null,
+            h('span', { style: 'font-size: 9px; color: var(--text-mute); font-family: ui-monospace, monospace;' }, [blendLabel]),
             h('span', { class: `chip ${compat.toLowerCase()}`, style: 'font-size: 9px; padding: 1px 5px; margin-top: 2px;' }, [compat]),
           ]),
         )
@@ -374,24 +512,22 @@ export function ConfiguratorPage(_params: Record<string, string>): HTMLElement {
 
     // price strip
     while (priceStrip.firstChild) priceStrip.removeChild(priceStrip.firstChild)
-    const missingIds = steps.map((s: SequenceStep) => s.motionId).concat(
-      steps
-        .map((s: SequenceStep) => s.transitionToNext?.designedMotionId)
-        .filter((x: string | undefined): x is string => Boolean(x)),
-    ).filter((id: string) => !isOwned(id))
-    const totalPrice = totalMissingPrice(
-      steps
-        .map((s: SequenceStep) => ({ motionId: s.motionId }))
-        .concat(steps.map((s: SequenceStep) => ({ motionId: s.transitionToNext?.designedMotionId || '' })).filter((x: { motionId: string }) => x.motionId)),
-    )
+    const uniqueIds = new Set<string>()
+    steps.forEach((s: SequenceStep) => {
+      uniqueIds.add(s.motionId)
+      if (s.transitionToNext?.kind === 'Designed') {
+        uniqueIds.add(s.transitionToNext.designedMotionId)
+      }
+    })
+    const idList = Array.from(uniqueIds)
+    const missingCount = idList.filter((id) => !isOwned(id)).length
+    const ownedCount = idList.length - missingCount
+    const totalPrice = totalMissingPrice(idList.map((id) => ({ motionId: id })))
+
     priceStrip.appendChild(
       h('div', { style: 'display: flex; align-items: center; gap: 14px; font-size: 13px;' }, [
-        h('span', { style: 'color: var(--text-dim);' }, [
-          `Missing motions: ${missingIds.length}`,
-        ]),
-        h('span', { style: 'color: var(--accent-2);' }, [
-          `Owned: ${steps.length - missingIds.filter((id: string) => steps.some((s: SequenceStep) => s.motionId === id)).length}`,
-        ]),
+        h('span', { style: 'color: var(--text-dim);' }, [`Missing motions: ${missingCount}`]),
+        h('span', { style: 'color: var(--accent-2);' }, [`Owned: ${ownedCount}`]),
       ]),
     )
     priceStrip.appendChild(
@@ -400,9 +536,9 @@ export function ConfiguratorPage(_params: Record<string, string>): HTMLElement {
         h('span', { style: 'font-weight: 700; font-size: 18px;' }, [yen(totalPrice)]),
         h('button', {
           class: 'btn primary',
-          disabled: missingIds.length === 0,
+          disabled: missingCount === 0,
           onclick: () => navigate('#/purchase'),
-        }, [missingIds.length === 0 ? '✓ All Owned' : 'Buy Missing Motions']),
+        }, [missingCount === 0 ? '✓ All Owned' : 'Buy Missing Motions']),
       ]),
     )
     sequenceArea.appendChild(priceStrip)
@@ -426,7 +562,10 @@ export function ConfiguratorPage(_params: Record<string, string>): HTMLElement {
   return container
 }
 
-function makePlayControls(onPlayAll: () => void, getPreview: () => PreviewController | null): HTMLElement {
+function makePlayControls(
+  onPlayAll: () => void,
+  getPreview: () => PreviewController | null,
+): HTMLElement {
   const playBtn = h('button', { class: 'btn small' }, ['⏸']) as HTMLButtonElement
   playBtn.addEventListener('click', () => {
     const p = getPreview()
@@ -464,5 +603,77 @@ function makePlayControls(onPlayAll: () => void, getPreview: () => PreviewContro
     ]),
     h('div', { class: 'timing' }, ['SEQUENCE PREVIEW']),
     speedGroup,
+  ])
+}
+
+function blendSlider(opts: {
+  label: string
+  valueSec: number
+  band: { minSec: number; maxSec: number } | null
+  onChange: (v: number) => void
+}): HTMLElement {
+  const max = BLEND_SLIDER_MAX_SEC
+  const step = 0.01
+  const pct = (s: number) => `${Math.min(100, Math.max(0, (s / max) * 100))}%`
+
+  const valueLabel = h('span', {
+    style: 'font-family: ui-monospace, monospace; font-size: 12px; color: var(--text);',
+  }, [`${opts.valueSec.toFixed(2)}s`])
+
+  const band = opts.band
+  const bandEl = band
+    ? h('div', {
+        class: 'blend-rec-band',
+        style: `left: ${pct(band.minSec)}; width: calc(${pct(band.maxSec)} - ${pct(band.minSec)});`,
+        title: `推奨: ${band.minSec.toFixed(2)}s 〜 ${band.maxSec.toFixed(2)}s`,
+      }, [])
+    : null
+
+  const input = h('input', {
+    type: 'range',
+    min: 0,
+    max,
+    step,
+    value: opts.valueSec,
+    class: 'blend-range',
+    oninput: (e: Event) => {
+      const v = parseFloat((e.currentTarget as HTMLInputElement).value)
+      valueLabel.textContent = `${v.toFixed(2)}s`
+      opts.onChange(v)
+    },
+  }) as HTMLInputElement
+
+  return h('div', { class: 'blend-slider' }, [
+    h('div', { class: 'blend-labels' }, [
+      h('span', { class: 'blend-label' }, [opts.label]),
+      valueLabel,
+    ]),
+    h('div', { class: 'blend-track' }, [
+      bandEl,
+      input,
+    ]),
+    h('div', { class: 'blend-minmax' }, [
+      h('span', {}, ['0.00s']),
+      band
+        ? h('span', { style: 'color: var(--good);' }, [
+            `推奨 ${band.minSec.toFixed(2)}–${band.maxSec.toFixed(2)}s`,
+          ])
+        : h('span', {}, ['—']),
+      h('span', {}, [`${max.toFixed(2)}s`]),
+    ]),
+  ])
+}
+
+function designerNote(rb: RecommendedBlend): HTMLElement | null {
+  if (!rb.designerNote) return null
+  return h('div', {
+    style:
+      'font-size: 11px; color: var(--text-dim); line-height: 1.5; padding: 8px 10px; background: rgba(255, 92, 138, 0.06); border: 1px solid rgba(255, 92, 138, 0.25); border-radius: var(--radius-sm);',
+  }, [
+    h('div', {
+      style:
+        'color: var(--accent); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 4px;',
+    }, ['Designer Note']),
+    rb.designerNote,
   ])
 }

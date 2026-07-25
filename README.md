@@ -43,3 +43,45 @@ npm run screenshots  # 各ページのスクショを保存 (scratchpad/screensh
 - Designed Transition = Animatorがつなぎ方をデザインしたMotion商品
 - Compatibility判定はMetadata（Foot Phase / Condition / Speed）ベース
 - 全画面モック状態で操作可能。購入・LibraryはLocalStorage未使用のオンメモリ実装
+
+## Transition Model
+
+Motion同士の接続には **Blend Length**（クロスフェード時間）を持たせる。Designed Transition の場合は Motion A → Designed → Motion B の**両端に微小Blend**を挟むことで、
+Designed Transitionの開始・終了ポーズと隣接Motionの微妙なズレ（ループ位置差など）を吸収する。
+
+```ts
+type Transition =
+  | { kind: 'Auto'; blendLengthSec: number }                    // A → B の1本Blend
+  | {                                                            // A →[in]→ D →[out]→ B
+      kind: 'Designed'
+      designedMotionId: string
+      inBlendSec: number
+      outBlendSec: number
+    }
+```
+
+### Recommended Blend (Motion Metadata)
+
+各Motionは Creator が「このMotionはこの範囲でBlendするのが自然」というレンジを持つ:
+
+```ts
+motion.recommendedBlend = {
+  inMinSec, inMaxSec,      // 前のMotion → 自分 の吸収Blend推奨範囲
+  outMinSec, outMaxSec,    // 自分 → 次のMotion の吸収Blend推奨範囲
+  designerNote?: string,   // 「これ以上長いとAnticipationが薄まる」等の注記
+}
+```
+
+Configurator の Transition Editor では:
+- Blend Lengthスライダー上に **緑帯（Recommended Band）** で推奨レンジを表示（両端Motionのレンジ交差）
+- 選択されたDesigned Transitionの `designerNote` があれば表示
+
+### Default Blend Length
+
+- **Auto**: `min(fromMotion.recommendedBlend.outMaxSec, toMotion.recommendedBlend.inMaxSec)`（両端の推奨上限のタイトい方）
+- **Designed inBlend**: `min(fromMotion.outMaxSec, designedMotion.inMaxSec)`
+- **Designed outBlend**: `min(designedMotion.outMaxSec, toMotion.inMaxSec)`
+
+Sequence Strip の各Transitionノードには数値表示:
+- Auto: `0.20s`
+- Designed: `0.08 + 0.08s`

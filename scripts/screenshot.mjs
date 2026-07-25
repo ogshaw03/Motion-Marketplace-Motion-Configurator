@@ -90,6 +90,51 @@ async function main() {
     await p.screenshot({ path: path.join(OUT, 'configurator-playing.png') })
     await p.close()
 
+    // transition editor - Auto
+    const p2 = await context.newPage()
+    await p2.goto(BASE + '/#/configurator', { waitUntil: 'domcontentloaded' })
+    await p2.waitForFunction(() => window.__APP_READY__ === true, undefined, { timeout: 10000 })
+    await p2.waitForTimeout(1200)
+    await p2.evaluate(() => {
+      const node = document.querySelector('.transition-node')
+      if (node) node.click()
+    })
+    await p2.waitForTimeout(600)
+    await p2.screenshot({ path: path.join(OUT, 'transition-editor-auto.png') })
+    await p2.close()
+
+    // transition editor - Designed selected
+    // Build a Run → Idle sequence so Designed Transition candidates exist,
+    // then click the transition node and pick Skid Stop.
+    const p3 = await context.newPage()
+    await p3.goto(BASE + '/#/configurator', { waitUntil: 'domcontentloaded' })
+    await p3.waitForFunction(() => window.__APP_READY__ === true, undefined, { timeout: 10000 })
+    await p3.waitForTimeout(600)
+    await p3.evaluate(() => {
+      window.DB.currentSequence.steps = [
+        { motionId: 'anime-run', loopCount: 2, transitionToNext: { kind: 'Auto', blendLengthSec: 0.15 } },
+        { motionId: 'idle-neutral', loopCount: 1 },
+      ]
+      window.location.hash = '#/configurator?t=' + Date.now()
+    })
+    await p3.waitForTimeout(700)
+    await p3.evaluate(() => {
+      const node = document.querySelector('.transition-node')
+      if (node) node.click()
+    })
+    await p3.waitForTimeout(500)
+    await p3.evaluate(() => {
+      const headings = Array.from(document.querySelectorAll('.side-panel h3'))
+      const designedHeading = headings.find((h) => h.textContent === 'DESIGNED')
+      if (!designedHeading) return
+      let n = designedHeading.nextElementSibling
+      while (n && !n.classList.contains('next-motion-item')) n = n.nextElementSibling
+      if (n) n.click()
+    })
+    await p3.waitForTimeout(700)
+    await p3.screenshot({ path: path.join(OUT, 'transition-editor-designed.png') })
+    await p3.close()
+
     await browser.close()
   } finally {
     server.kill('SIGTERM')

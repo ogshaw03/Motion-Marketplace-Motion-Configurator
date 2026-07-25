@@ -38,6 +38,14 @@ export interface Creator {
   specialty: string[]
 }
 
+export interface RecommendedBlend {
+  inMinSec: number
+  inMaxSec: number
+  outMinSec: number
+  outMaxSec: number
+  designerNote?: string
+}
+
 export interface Motion {
   id: string
   name: string
@@ -63,18 +71,24 @@ export interface Motion {
     endCondition: string
     durationSec: number
   }
+  recommendedBlend: RecommendedBlend
   animationClipKey: string
   thumbColor: string
 }
 
+export type Transition =
+  | { kind: 'Auto'; blendLengthSec: number }
+  | {
+      kind: 'Designed'
+      designedMotionId: string
+      inBlendSec: number
+      outBlendSec: number
+    }
+
 export interface SequenceStep {
   motionId: string
   loopCount: number
-  transitionToNext?: {
-    kind: 'Auto' | 'Designed'
-    designedMotionId?: string
-    blendLengthSec: number
-  }
+  transitionToNext?: Transition
 }
 
 export interface Sequence {
