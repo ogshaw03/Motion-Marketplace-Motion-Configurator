@@ -44,6 +44,14 @@ npm run screenshots  # 各ページのスクショを保存 (scratchpad/screensh
 - Compatibility判定はMetadata（Foot Phase / Condition / Speed）ベース
 - 全画面モック状態で操作可能。購入・LibraryはLocalStorage未使用のオンメモリ実装
 
+## Character / Motion Assets
+
+MVP は Mixamo互換 Standard Skeleton + GLB (Binary glTF)。
+
+- 仕様: [`docs/standard-skeleton.md`](docs/standard-skeleton.md)
+- Character 配置先: `public/character/character.glb`（未配置ならプロシージャル箱人間にフォールバック）
+- Motion 配置先: `public/motions/<motion-id>.glb`
+
 ## Transition Model
 
 Motion同士の接続には **Blend Length**（クロスフェード時間）を持たせる。Designed Transition の場合は Motion A → Designed → Motion B の**両端に微小Blend**を挟むことで、
